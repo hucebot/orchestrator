@@ -1,0 +1,21 @@
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: .ci/Dockerfile
+    image: orchestrator:latest
+    container_name: orchestrator
+    network_mode: "host"
+    ipc: host
+    pid: host
+    environment:
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=file:///configs/cyclonedds.xml
+    env_file:
+      - .env
+    volumes:
+      - ./src:/workspace/src
+      - ./configs:/configs
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    command: >
+      bash -c "colcon build --symlink-install && source install/setup.bash && ros2 run orchestrator orchestrator_node"
