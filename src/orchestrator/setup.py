@@ -19,6 +19,7 @@ setup(
     entry_points={
         'console_scripts': [
             'orchestrator_node = orchestrator.orchestrator_node:main',
+            'dummy_environment = orchestrator.dummy_enviroment:main',
         ],
     },
 )

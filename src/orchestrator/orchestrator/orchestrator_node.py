@@ -1,28 +1,5 @@
+
 import rclpy
-from rclpy.node import Node
-
-
-class OrchestratorNode(Node):
-	def __init__(self):
-		super().__init__('orchestrator')
-		self.get_logger().info('Orchestrator node started')
-		self._counter = 0
-		self._timer = self.create_timer(1.0, self.timer_callback)
-
-	def timer_callback(self):
-		self._counter += 1
-		self.get_logger().info(f'Heartbeat: {self._counter}')
-
-
-def main(args=None):
-	rclpy.init(args=args)
-	node = OrchestratorNode()
-	try:
-		rclpy.spin(node)
-	except KeyboardInterrupt:
-		pass
-	finally:
-		node.destroy_node()import rclpy
 from rclpy.node import Node
 from enum import Enum
 import math
@@ -77,16 +54,16 @@ class PickPlaceOrchestrator(Node):
         self.pub_toggle_fp = self.create_publisher(Bool, '/orchestrator/pose/toggle_fp', 10)
         self.pub_nav_target = self.create_publisher(String, '/nav/goal/target', 10)
         self.pub_target_skill = self.create_publisher(String, '/motion_recorder/target_skill', 10)
-        self.pub_target_frame = self.create_publisher(String, '/motion_recorder/target_frame', 10)
         self.pub_target_object = self.create_publisher(String, '/orchestrator/pose/target_object', 10)
 
         # --- Subscribers ---
         self.sub_nav_done = self.create_subscription(Bool, '/nav/goal/is_done', self.nav_done_cb, 10)
         self.sub_motion_status = self.create_subscription(String, '/motion_recorder/status', self.motion_status_cb, 10)
         self.sub_object_pose = self.create_subscription(PoseStamped, '/object_pose', self.object_pose_cb, 10)
+        self.sub_april_tag_pose = self.create_subscription(PoseStamped, 'apriltag_pose/pose_tag_2', self.object_pose_cb, 10) # Assuming same processing for simplicity
 
         # --- Services ---
-        # Placeholder for your home pose service
+        # Placeholder for your home pose service # TODO: replace with self.srv_home = self.create_service(Trigger, 'home_position', self._home_service_cb)
         self.client_home_pose = self.create_client(Trigger, '/trigger_home_pose')
 
         self.get_logger().info("Orchestrator initialized. Starting state machine...")
@@ -134,13 +111,26 @@ class PickPlaceOrchestrator(Node):
     # HELPER METHODS
     # ===============================
     def trigger_home_pose(self):
-        """Placeholder function to trigger home pose."""
+        """Trigger the home pose service asynchronously and handle response."""
+
         self.get_logger().info("Triggering Home Pose...")
-        if self.client_home_pose.wait_for_service(timeout_sec=1.0):
-            req = Trigger.Request()
-            self.client_home_pose.call_async(req)
-        else:
-            self.get_logger().warn("Home pose service not available, continuing anyway.")
+        if not self.client_home_pose.wait_for_service(timeout_sec=1.0):
+            self.get_logger().error("Home pose service not available!")
+            return
+
+        req = Trigger.Request()
+        future = self.client_home_pose.call_async(req)
+        future.add_done_callback(self._on_home_response)
+
+    def _on_home_response(self, future):
+        try:
+            response = future.result()
+            if response.success:
+                self.get_logger().info(f"Home pose succeeded: {response.message}")
+            else:
+                self.get_logger().warn(f"Home pose failed: {response.message}")
+        except Exception as e:
+            self.get_logger().error(f"Home service call failed: {e}")
 
     def reset_flags(self):
         self.nav_is_done = False
@@ -196,7 +186,7 @@ class PickPlaceOrchestrator(Node):
 
         elif self.state == State.WAIT_OPEN_FRIDGE_DONE:
             if self.motion_status == "done":
-                if len(self.items_to_process) > 0:
+                if len(self.items_to_process) > 1:
                     self.current_item = self.items_to_process.pop(0)
                     self.get_logger().info(f"6.i. Proceeding with item: {self.current_item}. Going to table.")
                     self.publish_string(self.pub_nav_target, "table")
@@ -219,7 +209,10 @@ class PickPlaceOrchestrator(Node):
         elif self.state == State.WAIT_ITEM_POSE:
             if self.stable_pose_achieved:
                 self.get_logger().info("6.iv. Item pose stable. Grasping item.")
-                self.publish_string(self.pub_target_frame, "grasp_item")
+                if self.current_item is None:
+                    self.get_logger().error("No current item set before grasping")
+                    return
+                self.publish_string(self.pub_target_skill, "grasp_" + self.current_item)
                 self.reset_flags()
                 self.state = State.WAIT_ITEM_GRASPED
 
