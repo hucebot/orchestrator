@@ -44,9 +44,12 @@ class PickPlaceOrchestrator(Node):
                 {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"}
             ]
 
-
         self.current_task = self.tasks.pop(0)
         self.state = State.S1_START_NAV_AND_MESH
+
+        # UI/Logging Tracking
+        self.last_published_task = ""
+        self.last_published_state = None
 
         # Flags
         self.nav_done = False
@@ -56,7 +59,7 @@ class PickPlaceOrchestrator(Node):
         self.skill_done = False
         self.stable_pose = False
 
-        # Kalman Filter States (6D: x, y, z, roll, pitch, yaw)
+        # Kalman Filter States
         self.kf_x = np.zeros(6)
         self.kf_P = np.eye(6) * 1.0
         self.kf_Q = np.eye(6) * 0.01
@@ -71,6 +74,8 @@ class PickPlaceOrchestrator(Node):
         self.pub_dock = self.create_publisher(Bool, '/docking/trigger', 10)
         self.pub_skill = self.create_publisher(String, '/inference/skill', 10)
         self.pub_target_pose = self.create_publisher(PoseStamped, '/nav/target_pose', 10)
+        self.pub_ui_task = self.create_publisher(String, '/orchestrator/ui/current_task', 10)
+        self.pub_ui_state = self.create_publisher(String, '/orchestrator/ui/current_state', 10)
 
         # Subscribers
         self.create_subscription(Bool, '/nav/status', self._cb_nav, 10)
@@ -78,30 +83,40 @@ class PickPlaceOrchestrator(Node):
         self.create_subscription(Bool, '/fp/mesh_status', self._cb_mesh, 10)
         self.create_subscription(Bool, '/docking/status', self._cb_dock, 10)
         self.create_subscription(Bool, '/inference/status', self._cb_skill, 10)
-
-        # Pose Subscribers (both feed into the same logic, but we filter by state)
         self.create_subscription(PoseStamped, '/object_pose', lambda msg: self._cb_pose(msg, is_tag=False), 10)
         self.create_subscription(PoseStamped, '/apriltag_pose/pose', lambda msg: self._cb_pose(msg, is_tag=True), 10)
 
         self.timer = self.create_timer(0.1, self.tick)
+        self.get_logger().info("Orchestrator Initialized and Running.")
 
-    def _cb_nav(self, msg): self.nav_done = msg.data
-    def _cb_home(self, msg): self.home_cfg_done = msg.data
-    def _cb_mesh(self, msg): self.mesh_loaded = msg.data
-    def _cb_dock(self, msg): self.dock_done = msg.data
-    def _cb_skill(self, msg): self.skill_done = msg.data
+    def _cb_nav(self, msg):
+        if msg.data and not self.nav_done: self.get_logger().info("Callback: Navigation Done")
+        self.nav_done = msg.data
+
+    def _cb_home(self, msg):
+        if msg.data and not self.home_cfg_done: self.get_logger().info("Callback: Home Config Set")
+        self.home_cfg_done = msg.data
+
+    def _cb_mesh(self, msg):
+        if msg.data and not self.mesh_loaded: self.get_logger().info("Callback: Mesh Loaded")
+        self.mesh_loaded = msg.data
+
+    def _cb_dock(self, msg):
+        if msg.data and not self.dock_done: self.get_logger().info("Callback: Docking Complete")
+        self.dock_done = msg.data
+
+    def _cb_skill(self, msg):
+        if msg.data and not self.skill_done: self.get_logger().info("Callback: Skill Execution Finished")
+        self.skill_done = msg.data
 
     def _cb_pose(self, msg, is_tag):
-        # Ignore poses if we aren't waiting for one
         if self.state not in [State.S6_WAIT_DOCK_POSE, State.S11_WAIT_TARGET_POSE]:
             return
 
-        # Ignore tag poses if we are looking for an object, and vice versa
         active_obj = self.current_task["dock_obj"] if self.state == State.S6_WAIT_DOCK_POSE else self.current_task["target_obj"]
         if (is_tag and "tag" not in active_obj) or (not is_tag and "tag" in active_obj):
             return
 
-        # 1. Kalman Filter Process
         pos = msg.pose.position
         q = msg.pose.orientation
         r, p, y = self.euler_from_quat(q.x, q.y, q.z, q.w)
@@ -116,7 +131,6 @@ class PickPlaceOrchestrator(Node):
             self.kf_x = self.kf_x + K @ (z - self.kf_x)
             self.kf_P = (np.eye(6) - K) @ self.kf_P
 
-        # 2. Republish Filtered Pose
         filtered_msg = PoseStamped()
         filtered_msg.header = msg.header
         filtered_msg.pose.position.x, filtered_msg.pose.position.y, filtered_msg.pose.position.z = self.kf_x[0], self.kf_x[1], self.kf_x[2]
@@ -124,15 +138,15 @@ class PickPlaceOrchestrator(Node):
         filtered_msg.pose.orientation.x, filtered_msg.pose.orientation.y, filtered_msg.pose.orientation.z, filtered_msg.pose.orientation.w = qx, qy, qz, qw
         self.pub_target_pose.publish(filtered_msg)
 
-        # 3. Stability Check (using filtered state)
         self.pose_buffer.append(self.kf_x.copy())
         if len(self.pose_buffer) > 10:
             self.pose_buffer.pop(0)
 
         if len(self.pose_buffer) == 10:
-            # Check if variance across last 10 filtered poses is extremely low
             std_devs = np.std(self.pose_buffer, axis=0)
-            if np.all(std_devs[:3] < 0.01) and np.all(std_devs[3:] < 0.02): # 1cm translation, ~1deg rotation limits
+            if np.all(std_devs[:3] < 0.01) and np.all(std_devs[3:] < 0.02):
+                if not self.stable_pose:
+                    self.get_logger().info("Pose stabilized.")
                 self.stable_pose = True
 
     def reset_pose_tracking(self):
@@ -141,10 +155,24 @@ class PickPlaceOrchestrator(Node):
         self.stable_pose = False
 
     def tick(self):
+        if not self.tasks and self.state == State.DONE:
+            return
+
         t = self.current_task
 
+        # UI & Logging Updates triggered dynamically on change
+        if self.last_published_task != t["task"]:
+            self.get_logger().info(f"\n================ STARTING TASK: {t['task'].upper()} ================")
+            self.pub_ui_task.publish(String(data=t["task"]))
+            self.last_published_task = t["task"]
+
+        if self.last_published_state != self.state:
+            self.get_logger().info(f"--> Transitioned to: {self.state.name}")
+            self.pub_ui_state.publish(String(data=self.state.name))
+            self.last_published_state = self.state
+
+        # FSM Logic
         if self.state == State.S1_START_NAV_AND_MESH:
-            self.get_logger().info(f"Starting Task: {t['task']}")
             self.pub_nav.publish(String(data=t["nav_goal"]))
             if t["dock_obj"] != "none":
                 self.pub_mesh.publish(String(data=t["dock_obj"]))
@@ -218,12 +246,12 @@ class PickPlaceOrchestrator(Node):
                 self.state = State.S14_TASK_DONE
 
         elif self.state == State.S14_TASK_DONE:
-            self.get_logger().info(f"Finished Task: {t['task']}")
+            self.get_logger().info(f"Task {t['task']} Complete.")
             if self.tasks:
                 self.current_task = self.tasks.pop(0)
                 self.state = State.S1_START_NAV_AND_MESH
             else:
-                self.get_logger().info("All tasks completed.")
+                self.get_logger().info("All tasks in sequence completed successfully.")
                 self.state = State.DONE
 
     # --- Math Helpers ---
