@@ -8,28 +8,30 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Setup the workspace and copy your custom node
 WORKDIR /workspace
-COPY src/ /workspace/src/
-COPY . /workspace/src/orchestrator/
 
-# Resolve all dependencies and BUILD the workspace
-WORKDIR /workspace
+# Copy ONLY the package.xml to preserve the Docker cache
+COPY src/orchestrator/package.xml src/orchestrator/
+
+# Resolve all dependencies
 RUN apt-get update && \
     rosdep update && \
     rosdep install -y -r -q --from-paths src --ignore-src --rosdistro humble && \
     rm -rf /var/lib/apt/lists/*
 
-# Compile everything (your node + TIAGo descriptions) so ROS indexes the mesh paths
-RUN /bin/bash -c "source /opt/ros/humble/setup.bash && colcon build"
+# Copy the rest of the  source code
+COPY src/ src/
 
-# 6. Setup Entrypoint
+# Setup Entrypoint
 COPY .ci/entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 
 # Ensure the workspace is sourced automatically in bash
 RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc && \
     echo "source /workspace/install/setup.bash" >> ~/.bashrc
+
+# Compile everything
+RUN /bin/bash -c "source /opt/ros/humble/setup.bash && colcon build"
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]
