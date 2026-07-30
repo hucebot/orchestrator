@@ -5,6 +5,10 @@ import math
 import numpy as np
 from std_msgs.msg import String, Bool
 from geometry_msgs.msg import PoseStamped
+from std_srvs.srv import Trigger
+
+# Import QoS modules
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, qos_profile_sensor_data
 
 class State(Enum):
     S1_START_NAV_AND_MESH = 1
@@ -28,21 +32,36 @@ class PickPlaceOrchestrator(Node):
         super().__init__('pick_place_orchestrator')
 
         # 1. THE TASK QUEUE
+
+
+        # This tests all the picking motions with navigation and docking (Testing the pipeline up until we gradually have everything working)
         self.tasks = [
-                {"task": "open_fridge",        "nav_goal": "fridge_open",   "dock_obj": "tag_1",      "target_obj": "tag_1",  "skill": "open_fridge"},
-                {"task": "pick_milk",          "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "milk",   "skill": "grasp_milk"},
-                {"task": "place_milk_door",    "nav_goal": "fridge_door",   "dock_obj": "yellow_mug", "target_obj": "milk",   "skill": "place_item"},
-                {"task": "pick_juice",         "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "juice",  "skill": "grasp_juice"},
-                {"task": "place_juice_door",   "nav_goal": "fridge_door",   "dock_obj": "yellow_mug", "target_obj": "juice",  "skill": "place_item"},
-                {"task": "pick_apple_1",       "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "apple",  "skill": "grasp_apple"},
-                {"task": "place_apple_inside", "nav_goal": "fridge_inside", "dock_obj": "mustard",    "target_obj": "apple",  "skill": "place_item"},
-                {"task": "pick_banana",        "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "banana", "skill": "grasp_banana"},
-                {"task": "place_banana_inside","nav_goal": "fridge_inside", "dock_obj": "mustard",    "target_obj": "banana", "skill": "place_item"},
-                {"task": "pick_apple_2",       "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "apple",  "skill": "grasp_apple"},
-                {"task": "place_apple_inside", "nav_goal": "fridge_inside", "dock_obj": "mustard",    "target_obj": "apple",  "skill": "place_item"},
-                {"task": "close_fridge",       "nav_goal": "fridge_close",  "dock_obj": "yellow_mug", "target_obj": "none",   "skill": "close_fridge"},
-                {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"}
-            ]
+            {"task": "pick_milk",          "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "milk",   "skill": "pick_baguette"},
+            {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"},
+            {"task": "pick_juice",         "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "juice",  "skill": "pick_juice"},
+            {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"},
+            {"task": "pick_banana",        "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "banana",  "skill": "pick_banana"},
+            {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"},
+            {"task": "pick_baguette",        "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "baguette",  "skill": "pick_baguette"},
+            {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj":"none",   "skill":"none"},
+            {"task": "pick_apple",       "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "apple",  "skill": "pick_apple"},
+            {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj":"none",   "skill":"none"},
+        ]
+        # self.tasks = [
+        #         {"task": "open_fridge",        "nav_goal": "fridge_open",   "dock_obj": "tag_1",      "target_obj": "tag_1",  "skill": "open_fridge"},
+        #         {"task": "pick_milk",          "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "milk",   "skill": "grasp_milk"},
+        #         {"task": "place_milk_door",    "nav_goal": "fridge_door",   "dock_obj": "yellow_mug", "target_obj": "milk",   "skill": "place_item"},
+        #         {"task": "pick_juice",         "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "juice",  "skill": "grasp_juice"},
+        #         {"task": "place_juice_door",   "nav_goal": "fridge_door",   "dock_obj": "yellow_mug", "target_obj": "juice",  "skill": "place_item"},
+        #         {"task": "pick_apple_1",       "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "apple",  "skill": "grasp_apple"},
+        #         {"task": "place_apple_inside", "nav_goal": "fridge_inside", "dock_obj": "mustard",    "target_obj": "mustard",  "skill": "place_item"},
+        #         {"task": "pick_banana",        "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "banana", "skill": "grasp_banana"},
+        #         {"task": "place_banana_inside","nav_goal": "fridge_inside", "dock_obj": "mustard",    "target_obj": "banana", "skill": "place_item"},
+        #         {"task": "pick_apple_2",       "nav_goal": "table",         "dock_obj": "pot",        "target_obj": "apple",  "skill": "grasp_apple"},
+        #         {"task": "place_apple_inside", "nav_goal": "fridge_inside", "dock_obj": "mustard",    "target_obj": "apple",  "skill": "place_item"},
+        #         {"task": "close_fridge",       "nav_goal": "fridge_close",  "dock_obj": "yellow_mug", "target_obj": "none",   "skill": "close_fridge"},
+        #         {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"}
+        #     ]
 
         self.current_task = self.tasks.pop(0)
         self.state = State.S1_START_NAV_AND_MESH
@@ -67,24 +86,60 @@ class PickPlaceOrchestrator(Node):
         self.kf_initialized = False
         self.pose_buffer = []
 
-        # Publishers
-        self.pub_nav = self.create_publisher(String, '/nav/goal', 10)
-        self.pub_mesh = self.create_publisher(String, '/fp/load_mesh', 10)
-        self.pub_home = self.create_publisher(String, '/robot/home_cfg', 10)
-        self.pub_dock = self.create_publisher(Bool, '/docking/trigger', 10)
-        self.pub_skill = self.create_publisher(String, '/inference/skill', 10)
-        self.pub_target_pose = self.create_publisher(PoseStamped, '/nav/target_pose', 10)
-        self.pub_ui_task = self.create_publisher(String, '/orchestrator/ui/current_task', 10)
-        self.pub_ui_state = self.create_publisher(String, '/orchestrator/ui/current_state', 10)
+        # Service Client Cache (Stores dynamic home clients)
+        self.home_clients = {}
 
-        # Subscribers
-        self.create_subscription(Bool, '/nav/status', self._cb_nav, 10)
-        self.create_subscription(Bool, '/robot/home_status', self._cb_home, 10)
-        self.create_subscription(Bool, '/fp/mesh_status', self._cb_mesh, 10)
-        self.create_subscription(Bool, '/docking/status', self._cb_dock, 10)
-        self.create_subscription(Bool, '/inference/status', self._cb_skill, 10)
-        self.create_subscription(PoseStamped, '/object_pose', lambda msg: self._cb_pose(msg, is_tag=False), 10)
-        self.create_subscription(PoseStamped, '/apriltag_pose/pose', lambda msg: self._cb_pose(msg, is_tag=True), 10)
+        # ==========================================
+        # QoS PROFILES
+        # ==========================================
+
+        # Commands (Strings like nav goals, skills): RELIABLE, Queue 10.
+        # Why: We CANNOT drop a command if the network blips, so it must be reliable.
+        # A small buffer (10) ensures if nodes startup slightly out of sync, the command isn't lost.
+        qos_cmd = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+
+        # State/Toggles (Booleans): RELIABLE, Queue 1.
+        # Why: We need guaranteed delivery so we don't miss a transition, but we ONLY
+        # care about the absolute freshest state. If we toggle fast, old buffered toggles cause chaos.
+        qos_state = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
+        # Sensor Data (Poses): BEST_EFFORT, Queue 1. (Using ROS2's built-in preset)
+        # Why: If the network lags, do NOT buffer old poses. We want the robot to move
+        # to where the object is NOW, not where it was 2 seconds ago. Drops old frames.
+        qos_pose = qos_profile_sensor_data
+
+        # ==========================================
+        # PUBLISHERS
+        # ==========================================
+        self.pub_nav = self.create_publisher(String, '/nav/goal/target', qos_cmd)
+        self.pub_mesh = self.create_publisher(String, '/orchestrator/foundation_pose/target_object', qos_cmd)
+        self.pub_skill = self.create_publisher(String, '/inference/skill', qos_cmd)
+
+        self.pub_toggle_fp = self.create_publisher(Bool, '/orchestrator/foundation_pose/toggle', qos_state)
+        self.pub_dock = self.create_publisher(Bool, '/dock/goal/start', qos_state)
+        self.pub_ui_task = self.create_publisher(String, '/orchestrator/ui/current_task', qos_state)
+        self.pub_ui_state = self.create_publisher(String, '/orchestrator/ui/current_state', qos_state)
+
+        self.pub_target_pose = self.create_publisher(PoseStamped, '/nav/goal/target', qos_pose)
+
+        # ==========================================
+        # SUBSCRIBERS
+        # ==========================================
+        self.create_subscription(Bool, '/nav/goal/done', self._cb_nav, qos_state)
+        self.create_subscription(Bool, '/foundation_pose/mesh_status', self._cb_mesh, qos_state)
+        self.create_subscription(Bool, '/dock/goal/done', self._cb_dock, qos_state)
+        self.create_subscription(Bool, '/inference/status', self._cb_skill, qos_state)
+
+        self.create_subscription(PoseStamped, '/foundation_pose/object_pose', lambda msg: self._cb_pose(msg, is_tag=False), qos_pose)
+        self.create_subscription(PoseStamped, '/apriltag_pose/pose', lambda msg: self._cb_pose(msg, is_tag=True), qos_pose)
 
         self.timer = self.create_timer(0.1, self.tick)
         self.get_logger().info("Orchestrator Initialized and Running.")
@@ -93,9 +148,18 @@ class PickPlaceOrchestrator(Node):
         if msg.data and not self.nav_done: self.get_logger().info("Callback: Navigation Done")
         self.nav_done = msg.data
 
-    def _cb_home(self, msg):
-        if msg.data and not self.home_cfg_done: self.get_logger().info("Callback: Home Config Set")
-        self.home_cfg_done = msg.data
+    # Callback for async Home Service
+    def _cb_home_future(self, future):
+        try:
+            response = future.result()
+            if response.success:
+                self.get_logger().info("Callback: Home Config Set via Service")
+            else:
+                self.get_logger().warn(f"Home service returned failure: {response.message}")
+        except Exception as e:
+            self.get_logger().error(f"Home service call failed: {e}")
+        # Transition anyway to avoid deadlocking the FSM
+        self.home_cfg_done = True
 
     def _cb_mesh(self, msg):
         if msg.data and not self.mesh_loaded: self.get_logger().info("Callback: Mesh Loaded")
@@ -148,7 +212,8 @@ class PickPlaceOrchestrator(Node):
                 if not self.stable_pose:
                     self.get_logger().info("Pose stabilized.")
                 self.stable_pose = True
-
+            else:
+                self.get_logger().info("Pose not stable yet.")
     def reset_pose_tracking(self):
         self.kf_initialized = False
         self.pose_buffer.clear()
@@ -160,7 +225,8 @@ class PickPlaceOrchestrator(Node):
 
         t = self.current_task
 
-        # UI & Logging Updates triggered dynamically on change
+        # UI & Logging Updates
+        # This state just publishes the current state and task to the UI, so we can see what the orchestrator is doing.
         if self.last_published_task != t["task"]:
             self.get_logger().info(f"\n================ STARTING TASK: {t['task'].upper()} ================")
             self.pub_ui_task.publish(String(data=t["task"]))
@@ -172,41 +238,65 @@ class PickPlaceOrchestrator(Node):
             self.last_published_state = self.state
 
         # FSM Logic
+        # This state is responsible for calling the navigation goal, and loading the docking mesh if needed.
         if self.state == State.S1_START_NAV_AND_MESH:
             self.pub_nav.publish(String(data=t["nav_goal"]))
             if t["dock_obj"] != "none":
-                self.pub_mesh.publish(String(data=t["dock_obj"]))
+                mesh_update_str = "mesh_update_" + t["dock_obj"]
+                self.pub_mesh.publish(String(data=mesh_update_str))
             self.state = State.S2_WAIT_NAV
 
+        # Here we wait for navigation to be done.
         elif self.state == State.S2_WAIT_NAV:
             if self.nav_done:
                 self.nav_done = False
                 self.state = State.S3_SET_HOME_CFG
 
+        # Trigger the home configuration for the nav goal ( different home for pick, place, and fridge door )
         elif self.state == State.S3_SET_HOME_CFG:
-            self.pub_home.publish(String(data=f"{t['nav_goal']}_home"))
-            self.state = State.S4_WAIT_HOME_CFG
+            home_name = f"{t['nav_goal']}_home"
+            #XXX: MAKE SURE THAT THIS MATCHES THE SERVICE NAME IN THE HOME CONFIGURATION NODE  (cartesian_interface in our case)
+            srv_name = f"/home_position/{home_name}"
+
+            # Cache the client if we haven't seen it yet
+            if srv_name not in self.home_clients:
+                self.home_clients[srv_name] = self.create_client(Trigger, srv_name)
+
+            client = self.home_clients[srv_name]
+
+            # Non-blocking service check (so we don't freeze the tick loop)
+            if client.service_is_ready():
+                req = Trigger.Request()
+                future = client.call_async(req)
+                future.add_done_callback(self._cb_home_future)
+                self.state = State.S4_WAIT_HOME_CFG
+            else:
+                self.get_logger().warn(f"Waiting for home service: {srv_name}...", throttle_duration_sec=2.0)
+                # Failsafe: Stays in S3_SET_HOME_CFG until service is up
 
         elif self.state == State.S4_WAIT_HOME_CFG:
             if self.home_cfg_done:
                 self.home_cfg_done = False
                 self.state = State.S5_WAIT_DOCK_MESH if t["dock_obj"] != "none" else State.S12_EXECUTE_SKILL
 
+        # This make sure the docking mesh is loaded before we start looking for the docking pose.
         elif self.state == State.S5_WAIT_DOCK_MESH:
             if self.mesh_loaded:
                 self.mesh_loaded = False
                 self.reset_pose_tracking()
                 self.state = State.S6_WAIT_DOCK_POSE
 
+        # Wait for the docking pose to stabilize
         elif self.state == State.S6_WAIT_DOCK_POSE:
             if self.stable_pose:
                 self.stable_pose = False
                 self.state = State.S7_EXECUTE_DOCK
-
+        # Trigger the docking sequence, and wait for it to finish. Once done, we either go to the target mesh or execute the skill directly.
         elif self.state == State.S7_EXECUTE_DOCK:
             self.pub_dock.publish(Bool(data=True))
             self.state = State.S8_WAIT_DOCK
 
+        # Wait for docking to be done
         elif self.state == State.S8_WAIT_DOCK:
             if self.dock_done:
                 self.dock_done = False
