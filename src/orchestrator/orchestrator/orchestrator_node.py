@@ -73,6 +73,7 @@ class PickPlaceOrchestrator(Node):
         # Flags
         self.nav_done = False
         self.home_cfg_done = False
+        self.home_trigger_failed = False
         self.mesh_loaded = False
         self.dock_done = False
         self.skill_done = False
@@ -137,7 +138,9 @@ class PickPlaceOrchestrator(Node):
         self.create_subscription(Bool, '/foundation_pose/mesh_status', self._cb_mesh, qos_state)
         self.create_subscription(Bool, '/dock/goal/done', self._cb_dock, qos_state)
         self.create_subscription(Bool, '/inference/status', self._cb_skill, qos_state)
-
+        self.create_subscription(
+            Bool, '/cartesian_interface/home_done', self._cb_home, qos_state
+        )
         self.create_subscription(PoseStamped, '/foundation_pose/object_pose', lambda msg: self._cb_pose(msg, is_tag=False), qos_pose)
         self.create_subscription(PoseStamped, '/apriltag_pose/pose', lambda msg: self._cb_pose(msg, is_tag=True), qos_pose)
 
@@ -148,18 +151,29 @@ class PickPlaceOrchestrator(Node):
         if msg.data and not self.nav_done: self.get_logger().info("Callback: Navigation Done")
         self.nav_done = msg.data
 
-    # Callback for async Home Service
+    def _cb_home(self, msg):
+        if msg.data:
+            if not self.home_cfg_done:
+                self.get_logger().info("Callback: Home Config Physically Complete")
+            self.home_cfg_done = True
+        else:
+            self.get_logger().error("Callback: Home Config FAILED completely! Bouncing FSM to retry...")
+            # We reuse the future failure mechanism we built earlier to bounce back to S3
+            self.home_trigger_failed = True
+
+    # Callback for async Home Service Call
     def _cb_home_future(self, future):
         try:
             response = future.result()
             if response.success:
-                self.get_logger().info("Callback: Home Config Set via Service")
+                self.get_logger().info("Home service request accepted by Cartesian Interface. Waiting for physical motion...")
+                self.home_trigger_failed = False
             else:
                 self.get_logger().warn(f"Home service returned failure: {response.message}")
+                self.home_trigger_failed = True
         except Exception as e:
             self.get_logger().error(f"Home service call failed: {e}")
-        # Transition anyway to avoid deadlocking the FSM
-        self.home_cfg_done = True
+            self.home_trigger_failed = True
 
     def _cb_mesh(self, msg):
         if msg.data and not self.mesh_loaded: self.get_logger().info("Callback: Mesh Loaded")
@@ -277,7 +291,12 @@ class PickPlaceOrchestrator(Node):
                 # Failsafe: Stays in S3_SET_HOME_CFG until service is up
 
         elif self.state == State.S4_WAIT_HOME_CFG:
-            if self.home_cfg_done:
+            if self.home_trigger_failed:
+                self.get_logger().warn("Home configuration failed! Bouncing back to S3 to retry...", throttle_duration_sec=2.0)
+                self.home_trigger_failed = False
+                self.state = State.S3_SET_HOME_CFG  # Retry the service call
+
+            elif self.home_cfg_done:
                 self.home_cfg_done = False
                 self.state = State.S5_WAIT_DOCK_MESH if t["dock_obj"] != "none" else State.S12_EXECUTE_SKILL
 
