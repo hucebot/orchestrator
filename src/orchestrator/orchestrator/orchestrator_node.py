@@ -121,7 +121,7 @@ class PickPlaceOrchestrator(Node):
         # ==========================================
         self.pub_nav = self.create_publisher(String, '/nav/goal/target', qos_cmd)
         self.pub_mesh = self.create_publisher(String, '/orchestrator/foundation_pose/target_object', qos_cmd)
-        self.pub_skill = self.create_publisher(String, '/inference/skill', qos_cmd)
+        self.pub_skill = self.create_publisher(String, '/inference/execute_task', qos_cmd)
 
         self.pub_toggle_fp = self.create_publisher(Bool, '/orchestrator/foundation_pose/toggle', qos_state)
         self.pub_dock = self.create_publisher(Bool, '/dock/goal/start', qos_state)
@@ -206,14 +206,16 @@ class PickPlaceOrchestrator(Node):
         if len(self.pose_buffer) > 10:
             self.pose_buffer.pop(0)
 
-        if len(self.pose_buffer) == 10:
-            std_devs = np.std(self.pose_buffer, axis=0)
-            if np.all(std_devs[:3] < 0.01) and np.all(std_devs[3:] < 0.02):
-                if not self.stable_pose:
-                    self.get_logger().info("Pose stabilized.")
-                self.stable_pose = True
-            else:
-                self.get_logger().info("Pose not stable yet.", throttle_duration_sec=1.0)
+        # FIXME: pose is never stable upon change
+        # if len(self.pose_buffer) == 10:
+        #     std_devs = np.std(self.pose_buffer, axis=0)
+        #     if np.all(std_devs[:3] < 0.1) and np.all(std_devs[3:] < 0.2):
+        #         if not self.stable_pose:
+        #             self.get_logger().info("Pose stabilized.")
+        #         self.stable_pose = True
+        #     else:
+        #         self.get_logger().info("Pose not stable yet.", throttle_duration_sec=1.0)
+        self.stable_pose = True
     def reset_pose_tracking(self):
         self.kf_initialized = False
         self.pose_buffer.clear()
@@ -254,7 +256,7 @@ class PickPlaceOrchestrator(Node):
 
         # Trigger the home configuration for the nav goal ( different home for pick, place, and fridge door )
         elif self.state == State.S3_SET_HOME_CFG:
-            home_name = f"{t['nav_goal']}_home"
+            home_name = f"{t['nav_goal']}"
             #XXX: MAKE SURE THAT THIS MATCHES THE SERVICE NAME IN THE HOME CONFIGURATION NODE  (cartesian_interface in our case)
             srv_name = f"/home_position/{home_name}"
 
