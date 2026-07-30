@@ -3,7 +3,7 @@
     <General>
       <!-- Define which network interface to use -->
       <Interfaces>
-        <NetworkInterface name="enxc0470e98212b" priority="1" />
+        <NetworkInterface name="lo" priority="1" />
       </Interfaces>
       <MaxMessageSize>1400B</MaxMessageSize>
 

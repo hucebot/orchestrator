@@ -36,12 +36,12 @@ class PickPlaceOrchestrator(Node):
 
         # This tests all the picking motions with navigation and docking (Testing the pipeline up until we gradually have everything working)
         self.tasks = [
-            {"task": "pick_milk",          "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "milk",   "skill": "pick_baguette"},
+            {"task": "pick_milk",          "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "milk",   "skill": "pick_milk"},
             {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"},
             {"task": "pick_juice",         "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "juice",  "skill": "pick_juice"},
             {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"},
             {"task": "pick_banana",        "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "banana",  "skill": "pick_banana"},
-            {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"},
+            {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",  "skill": "none"},
             {"task": "pick_baguette",        "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "baguette",  "skill": "pick_baguette"},
             {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj":"none",   "skill":"none"},
             {"task": "pick_apple",       "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "apple",  "skill": "pick_apple"},
@@ -213,7 +213,7 @@ class PickPlaceOrchestrator(Node):
                     self.get_logger().info("Pose stabilized.")
                 self.stable_pose = True
             else:
-                self.get_logger().info("Pose not stable yet.")
+                self.get_logger().info("Pose not stable yet.", throttle_duration_sec=1.0)
     def reset_pose_tracking(self):
         self.kf_initialized = False
         self.pose_buffer.clear()
@@ -309,7 +309,8 @@ class PickPlaceOrchestrator(Node):
                     self.state = State.S12_EXECUTE_SKILL
 
         elif self.state == State.S9_LOAD_TARGET_MESH:
-            self.pub_mesh.publish(String(data=t["target_obj"]))
+            mesh_update_str = "mesh_update_" + t["target_obj"]
+            self.pub_mesh.publish(String(data=mesh_update_str))
             self.state = State.S10_WAIT_TARGET_MESH
 
         elif self.state == State.S10_WAIT_TARGET_MESH:
