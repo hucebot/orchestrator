@@ -38,8 +38,8 @@ class PickPlaceOrchestrator(Node):
         self.tasks = [
             {"task": "pick_milk",          "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "milk",   "skill": "pick_milk"},
             {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"},
-            {"task": "pick_juice",         "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "juice",  "skill": "pick_juice"},
-            {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"},
+            # {"task": "pick_juice",         "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "juice",  "skill": "pick_juice"},
+            # {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",   "skill": "none"},
             {"task": "pick_banana",        "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "banana",  "skill": "pick_banana"},
             {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",  "skill": "none"},
             {"task": "pick_baguette",        "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "baguette",  "skill": "pick_baguette"},
