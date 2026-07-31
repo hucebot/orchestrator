@@ -129,7 +129,7 @@ class PickPlaceOrchestrator(Node):
         self.pub_ui_task = self.create_publisher(String, '/orchestrator/ui/current_task', qos_state)
         self.pub_ui_state = self.create_publisher(String, '/orchestrator/ui/current_state', qos_state)
 
-        self.pub_target_pose = self.create_publisher(PoseStamped, '/nav/goal/target', qos_pose)
+        self.pub_target_pose = self.create_publisher(PoseStamped, '/dock/goal/target', qos_pose)
 
         # ==========================================
         # SUBSCRIBERS
@@ -188,7 +188,7 @@ class PickPlaceOrchestrator(Node):
         self.skill_done = msg.data
 
     def _cb_pose(self, msg, is_tag):
-        if self.state not in [State.S6_WAIT_DOCK_POSE, State.S11_WAIT_TARGET_POSE]:
+        if self.state not in [State.S6_WAIT_DOCK_POSE, State.S11_WAIT_TARGET_POSE, State.S7_EXECUTE_DOCK, State.S8_WAIT_DOCK]:
             return
 
         active_obj = self.current_task["dock_obj"] if self.state == State.S6_WAIT_DOCK_POSE else self.current_task["target_obj"]
