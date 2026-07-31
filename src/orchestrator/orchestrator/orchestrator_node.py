@@ -204,11 +204,28 @@ class PickPlaceOrchestrator(Node):
             self.kf_x = z
             self.kf_initialized = True
         else:
-            self.kf_P = self.kf_P + self.kf_Q
-            K = self.kf_P @ np.linalg.inv(self.kf_P + self.kf_R)
-            self.kf_x = self.kf_x + K @ (z - self.kf_x)
-            self.kf_P = (np.eye(6) - K) @ self.kf_P
+            # 1. Calculate shortest angular differences (handles -pi to pi wrap-around)
+            diff_r = (r - self.kf_x[3] + math.pi) % (2 * math.pi) - math.pi
+            diff_p = (p - self.kf_x[4] + math.pi) % (2 * math.pi) - math.pi
+            diff_y = (y - self.kf_x[5] + math.pi) % (2 * math.pi) - math.pi
 
+            # 2. Check for sudden orientation jumps (0.78 radians is ~45 degrees)
+            if abs(diff_r) > 0.78 or abs(diff_p) > 0.78 or abs(diff_y) > 0.78:
+                self.get_logger().warn("Large orientation jump detected. Ignoring pose.", throttle_duration_sec=1.0)
+                # Skip the Kalman update, leaving self.kf_x exactly as it was
+            else:
+                # 3. Apply unwrapped angles to z so the KF doesn't freak out near pi/-pi boundaries
+                z[3] = self.kf_x[3] + diff_r
+                z[4] = self.kf_x[4] + diff_p
+                z[5] = self.kf_x[5] + diff_y
+
+                # 4. Standard Kalman Filter Update
+                self.kf_P = self.kf_P + self.kf_Q
+                K = self.kf_P @ np.linalg.inv(self.kf_P + self.kf_R)
+                self.kf_x = self.kf_x + K @ (z - self.kf_x)
+                self.kf_P = (np.eye(6) - K) @ self.kf_P
+
+        # Publish the filtered state (If we skipped the update above, this just republishes the last stable pose)
         filtered_msg = PoseStamped()
         filtered_msg.header = msg.header
         filtered_msg.pose.position.x, filtered_msg.pose.position.y, filtered_msg.pose.position.z = self.kf_x[0], self.kf_x[1], self.kf_x[2]
@@ -220,16 +237,8 @@ class PickPlaceOrchestrator(Node):
         if len(self.pose_buffer) > 10:
             self.pose_buffer.pop(0)
 
-        # FIXME: pose is never stable upon change
-        # if len(self.pose_buffer) == 10:
-        #     std_devs = np.std(self.pose_buffer, axis=0)
-        #     if np.all(std_devs[:3] < 0.1) and np.all(std_devs[3:] < 0.2):
-        #         if not self.stable_pose:
-        #             self.get_logger().info("Pose stabilized.")
-        #         self.stable_pose = True
-        #     else:
-        #         self.get_logger().info("Pose not stable yet.", throttle_duration_sec=1.0)
         self.stable_pose = True
+
     def reset_pose_tracking(self):
         self.kf_initialized = False
         self.pose_buffer.clear()
