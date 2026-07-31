@@ -44,7 +44,7 @@ class PickPlaceOrchestrator(Node):
             {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj": "none",  "skill": "none"},
             {"task": "pick_baguette",        "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "baguette",  "skill": "pick_baguette"},
             {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj":"none",   "skill":"none"},
-            {"task": "pick_apple",       "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "apple",  "skill": "pick_apple"},
+            {"task": "pick_apple",       "nav_goal": "table",         "dock_obj": "pan",        "target_obj": "redapple",  "skill": "pick_apple"},
             {"task": "go_home",            "nav_goal": "home",          "dock_obj": "none",       "target_obj":"none",   "skill":"none"},
         ]
         # self.tasks = [
