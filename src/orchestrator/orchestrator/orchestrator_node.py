@@ -305,8 +305,14 @@ class PickPlaceOrchestrator(Node):
             elif self.home_cfg_done:
                 self.pub_resume.publish(Bool(data=True))
                 self.home_cfg_done = False
-                # Go to mesh wait, or directly to dock pose if no target mesh is needed
-                self.state = State.S5_WAIT_TARGET_MESH if t["target_obj"] != "none" else State.S6_WAIT_DOCK_POSE
+                
+                # SMART ROUTING: Decide exactly what to do after homing
+                if t["target_obj"] != "none":
+                    self.state = State.S5_WAIT_TARGET_MESH
+                elif t["dock_obj"] != "none":
+                    self.state = State.S6_WAIT_DOCK_POSE
+                else:
+                    self.state = State.S12_EXECUTE_SKILL
 
         # ==================================================
         # S5: Wait for Target Mesh to Finish Background Loading
@@ -315,7 +321,12 @@ class PickPlaceOrchestrator(Node):
             if self.mesh_loaded:
                 self.mesh_loaded = False
                 self.reset_pose_tracking()
-                self.state = State.S6_WAIT_DOCK_POSE
+                
+                # If we need to dock, do that next. Otherwise, skip straight to Target Pose.
+                if t["dock_obj"] != "none":
+                    self.state = State.S6_WAIT_DOCK_POSE
+                else:
+                    self.state = State.S11_WAIT_TARGET_POSE
 
         # ==================================================
         # S6 to S8: Docking (Using AprilTag)
