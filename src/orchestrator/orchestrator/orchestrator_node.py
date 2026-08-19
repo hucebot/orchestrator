@@ -454,6 +454,9 @@ class PickPlaceOrchestrator(Node):
             Bool, "/cartesian_interface/home_done", self._cb_home, qos_state
         )
         self.create_subscription(Bool, "/dock/goal/done", self._cb_dock, qos_state)
+        self.create_subscription(
+            Bool, "/orchestrator/manual_override", self._cb_manual_override, 10
+        )
 
         # Subscribe to all AprilTags defined in the configuration mapping
         unique_tags = set(self.nav_to_tag.values())
@@ -499,6 +502,39 @@ class PickPlaceOrchestrator(Node):
     def _cb_skill(self, msg):
         if msg.data and not self.skill_done:
             self.skill_done = True
+
+    # Maps each Wait/poll state to the flag(s) it is blocked on, so a manual
+    # override can pretend that flag's normal source (a sensor/service
+    # callback) just fired.
+    _WAIT_STATE_OVERRIDES = {
+        "WaitPreNavState": lambda ctx: setattr(ctx, "nav_done", True),
+        "WaitHomeAndNavState": lambda ctx: (
+            setattr(ctx, "nav_done", True),
+            setattr(ctx, "home_cfg_done", True),
+            setattr(ctx, "home_trigger_failed", False),
+        ),
+        "WaitDockPoseState": lambda ctx: setattr(ctx.tracker, "stable_pose", True),
+        "WaitDockState": lambda ctx: setattr(ctx, "dock_done", True),
+        "VerifyMeshState": lambda ctx: setattr(ctx, "mesh_loaded", True),
+        "WaitTargetPoseState": lambda ctx: setattr(ctx.tracker, "stable_pose", True),
+        "WaitSkillState": lambda ctx: setattr(ctx, "skill_done", True),
+    }
+
+    def _cb_manual_override(self, msg):
+        if not msg.data:
+            return
+
+        state_name = self.current_state.name
+        override = self._WAIT_STATE_OVERRIDES.get(state_name)
+        if override is None:
+            self.get_logger().warn(
+                f"Manual override received, but {state_name} isn't waiting on "
+                "anything right now. Ignoring."
+            )
+            return
+
+        override(self)
+        self.get_logger().warn(f"MANUAL OVERRIDE: forcing completion of {state_name}.")
 
     def _cb_home_future(self, future):
         try:
