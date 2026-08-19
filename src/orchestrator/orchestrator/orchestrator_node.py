@@ -16,11 +16,15 @@ from rclpy.qos import (
     qos_profile_sensor_data,
 )
 
+import time
+
+
 # ==========================================================
 # 1. HELPER CLASSES
 # ==========================================================
 class PoseTracker:
     """Encapsulates all the Kalman Filter math and Quaternion logic."""
+
     def __init__(self):
         self.kf_x = np.zeros(6)
         self.kf_P = np.eye(6) * 1.0
@@ -50,7 +54,10 @@ class PoseTracker:
             diff_y = (y - self.kf_x[5] + math.pi) % (2 * math.pi) - math.pi
 
             if abs(diff_r) > 0.78 or abs(diff_p) > 0.78 or abs(diff_y) > 0.78:
-                logger.warn("Large orientation jump detected. Ignoring pose.", throttle_duration_sec=1.0)
+                logger.warn(
+                    "Large orientation jump detected. Ignoring pose.",
+                    throttle_duration_sec=1.0,
+                )
             else:
                 z[3] = self.kf_x[3] + diff_r
                 z[4] = self.kf_x[4] + diff_p
@@ -63,9 +70,18 @@ class PoseTracker:
 
         filtered_msg = PoseStamped()
         filtered_msg.header = msg.header
-        (filtered_msg.pose.position.x, filtered_msg.pose.position.y, filtered_msg.pose.position.z) = (self.kf_x[0], self.kf_x[1], self.kf_x[2])
+        (
+            filtered_msg.pose.position.x,
+            filtered_msg.pose.position.y,
+            filtered_msg.pose.position.z,
+        ) = (self.kf_x[0], self.kf_x[1], self.kf_x[2])
         qx, qy, qz, qw = self._quat_from_euler(self.kf_x[3], self.kf_x[4], self.kf_x[5])
-        (filtered_msg.pose.orientation.x, filtered_msg.pose.orientation.y, filtered_msg.pose.orientation.z, filtered_msg.pose.orientation.w) = (qx, qy, qz, qw)
+        (
+            filtered_msg.pose.orientation.x,
+            filtered_msg.pose.orientation.y,
+            filtered_msg.pose.orientation.z,
+            filtered_msg.pose.orientation.w,
+        ) = (qx, qy, qz, qw)
 
         pub.publish(filtered_msg)
 
@@ -139,7 +155,7 @@ class StartHomeAndNavState(BaseState):
         t = ctx.current_task
 
         # 1. Trigger Final Nav
-        ctx.pub_nav.publish(String(data=t['nav_goal']))
+        ctx.pub_nav.publish(String(data=t["nav_goal"]))
 
         # 2. Trigger Homing
         srv_name = f"/home_position/{t['nav_goal']}"
@@ -152,7 +168,10 @@ class StartHomeAndNavState(BaseState):
             future = client.call_async(req)
             future.add_done_callback(ctx._cb_home_future)
         else:
-            ctx.get_logger().warn(f"Home service {srv_name} not ready! Marking failed to retry...", throttle_duration_sec=2.0)
+            ctx.get_logger().warn(
+                f"Home service {srv_name} not ready! Marking failed to retry...",
+                throttle_duration_sec=2.0,
+            )
             ctx.home_trigger_failed = True
 
         return WaitHomeAndNavState()
@@ -164,7 +183,9 @@ class WaitHomeAndNavState(BaseState):
 
         # If homing service rejected/failed, retry ONLY homing
         if ctx.home_trigger_failed:
-            ctx.get_logger().warn("Home config failed! Retrying homing...", throttle_duration_sec=2.0)
+            ctx.get_logger().warn(
+                "Home config failed! Retrying homing...", throttle_duration_sec=2.0
+            )
             ctx.home_trigger_failed = False
 
             srv_name = f"/home_position/{t['nav_goal']}"
@@ -224,6 +245,7 @@ class VerifyMeshState(BaseState):
         if ctx.mesh_loaded:
             ctx.mesh_loaded = False
             ctx.tracker.reset()
+            time.sleep(2.0)
             return WaitTargetPoseState()
 
         return self
@@ -281,24 +303,80 @@ class PickPlaceOrchestrator(Node):
 
         # Cleaned up task queue: Removed dock_obj, added do_dock, added all Place motions
         self.tasks = [
+            {
+                "task": "open_fridge",
+                "nav_goal": "fridge_open",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "open_fridge",
+            },
             # MILK
-            {"task": "pick_milk",      "nav_goal": "table",        "do_dock": True,  "target_obj": "milk",     "skill": "pick_milk"},
-            {"task": "place_milk",     "nav_goal": "fridge_door",  "do_dock": True,  "target_obj": "none",     "skill": "place_milk"},
-
+            {
+                "task": "pick_milk",
+                "nav_goal": "table",
+                "do_dock": True,
+                "target_obj": "milk",
+                "skill": "pick_milk",
+            },
+            {
+                "task": "place_milk",
+                "nav_goal": "fridge_door",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "place_milk",
+            },
             # BANANA
-            {"task": "pick_banana",    "nav_goal": "table",        "do_dock": True,  "target_obj": "banana",   "skill": "pick_banana"},
-            {"task": "place_banana",   "nav_goal": "fridge_place", "do_dock": True,  "target_obj": "none",     "skill": "place_banana"},
-
+            {
+                "task": "pick_banana",
+                "nav_goal": "table",
+                "do_dock": True,
+                "target_obj": "banana",
+                "skill": "pick_banana",
+            },
+            {
+                "task": "place_banana",
+                "nav_goal": "fridge_place",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "place_banana",
+            },
             # BAGUETTE
-            {"task": "pick_baguette",  "nav_goal": "table",        "do_dock": True,  "target_obj": "baguette", "skill": "pick_baguette"},
-            {"task": "place_baguette", "nav_goal": "fridge_place", "do_dock": True,  "target_obj": "none",     "skill": "place_baguette"},
-
+            {
+                "task": "pick_baguette",
+                "nav_goal": "table",
+                "do_dock": True,
+                "target_obj": "baguette",
+                "skill": "pick_baguette",
+            },
+            {
+                "task": "place_baguette",
+                "nav_goal": "fridge_place",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "place_baguette",
+            },
             # APPLE
-            {"task": "pick_apple",     "nav_goal": "table",        "do_dock": True,  "target_obj": "redapple", "skill": "pick_apple"},
-            {"task": "place_apple",    "nav_goal": "fridge_place", "do_dock": True,  "target_obj": "none",     "skill": "place_apple"},
-
-            # GO HOME
-            {"task": "go_home",        "nav_goal": "home",         "do_dock": False, "target_obj": "none",     "skill": "none"},
+            {
+                "task": "pick_apple",
+                "nav_goal": "table",
+                "do_dock": True,
+                "target_obj": "redapple",
+                "skill": "pick_apple",
+            },
+            {
+                "task": "place_apple",
+                "nav_goal": "fridge_place",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "place_apple",
+            },
+            {
+                "task": "close_fridge",
+                "nav_goal": "fridge_close",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "close_fridge",
+            },
         ]
 
         # Map the Navigation Goal directly to the required AprilTag ID for docking
@@ -306,8 +384,8 @@ class PickPlaceOrchestrator(Node):
             "table": "9",
             "fridge_place": "37",
             "fridge_door": "0",
-            "fridge_open": "99",
-            "fridge_close": "99"
+            "fridge_open": "38",
+            "fridge_close": "0",
         }
 
         self.current_task = self.tasks.pop(0)
@@ -328,27 +406,53 @@ class PickPlaceOrchestrator(Node):
         self._setup_ros()
 
     def _setup_ros(self):
-        qos_cmd = QoSProfile(reliability=QoSReliabilityPolicy.RELIABLE, history=QoSHistoryPolicy.KEEP_LAST, depth=10)
-        qos_state = QoSProfile(reliability=QoSReliabilityPolicy.RELIABLE, history=QoSHistoryPolicy.KEEP_LAST, depth=1)
+        qos_cmd = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10,
+        )
+        qos_state = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
 
         # Publishers
         self.pub_nav = self.create_publisher(String, "/nav/goal/target", qos_cmd)
-        self.pub_mesh = self.create_publisher(String, "/orchestrator/foundation_pose/target_object", qos_cmd)
-        self.pub_skill = self.create_publisher(String, "/inference/execute_task", qos_cmd)
-        self.pub_ui_task = self.create_publisher(String, "/orchestrator/ui/current_task", qos_state)
-        self.pub_ui_state = self.create_publisher(String, "/orchestrator/ui/current_state", qos_state)
+        self.pub_mesh = self.create_publisher(
+            String, "/orchestrator/foundation_pose/target_object", qos_cmd
+        )
+        self.pub_skill = self.create_publisher(
+            String, "/inference/execute_task", qos_cmd
+        )
+        self.pub_ui_task = self.create_publisher(
+            String, "/orchestrator/ui/current_task", qos_state
+        )
+        self.pub_ui_state = self.create_publisher(
+            String, "/orchestrator/ui/current_state", qos_state
+        )
         self.pub_resume = self.create_publisher(Bool, "/ros_control_bridge/restart", 10)
-        self.pub_teleop_mode = self.create_publisher(String, "/streamdeck/teleop_mode", 10)
-        self.pub_gripper_right = self.create_publisher(JointTrajectory, "/gripper_right_controller/joint_trajectory", 10)
+        self.pub_teleop_mode = self.create_publisher(
+            String, "/streamdeck/teleop_mode", 10
+        )
+        self.pub_gripper_right = self.create_publisher(
+            JointTrajectory, "/gripper_right_controller/joint_trajectory", 10
+        )
 
         self.pub_dock = self.create_publisher(Bool, "/dock/goal/start", qos_state)
-        self.pub_target_pose = self.create_publisher(PoseStamped, "/dock/goal/target", qos_profile_sensor_data)
+        self.pub_target_pose = self.create_publisher(
+            PoseStamped, "/dock/goal/target", qos_profile_sensor_data
+        )
 
         # Static Subscribers
         self.create_subscription(Bool, "/nav/goal/done", self._cb_nav, qos_state)
-        self.create_subscription(Bool, "/foundation_pose/mesh_status", self._cb_mesh, qos_state)
+        self.create_subscription(
+            Bool, "/foundation_pose/mesh_status", self._cb_mesh, qos_state
+        )
         self.create_subscription(Bool, "/inference/status", self._cb_skill, qos_state)
-        self.create_subscription(Bool, "/cartesian_interface/home_done", self._cb_home, qos_state)
+        self.create_subscription(
+            Bool, "/cartesian_interface/home_done", self._cb_home, qos_state
+        )
         self.create_subscription(Bool, "/dock/goal/done", self._cb_dock, qos_state)
 
         # Subscribe to all AprilTags defined in the configuration mapping
@@ -357,7 +461,9 @@ class PickPlaceOrchestrator(Node):
             self.create_subscription(
                 PoseStamped,
                 f"/apriltag_pose/pose_tag_{tag_id}",
-                lambda msg, tid=tag_id: self._cb_pose(msg, source_type="dock", tag_id=tid),
+                lambda msg, tid=tag_id: self._cb_pose(
+                    msg, source_type="dock", tag_id=tid
+                ),
                 qos_profile_sensor_data,
             )
 
@@ -373,16 +479,26 @@ class PickPlaceOrchestrator(Node):
 
     # --- Simple Callbacks ---
     def _cb_nav(self, msg):
-        if msg.data and not self.nav_done: self.nav_done = True
+        if msg.data and not self.nav_done:
+            self.nav_done = True
+
     def _cb_home(self, msg):
-        if msg.data: self.home_cfg_done = True
-        else: self.home_trigger_failed = True
+        if msg.data:
+            self.home_cfg_done = True
+        else:
+            self.home_trigger_failed = True
+
     def _cb_mesh(self, msg):
-        if msg.data and not self.mesh_loaded: self.mesh_loaded = True
+        if msg.data and not self.mesh_loaded:
+            self.mesh_loaded = True
+
     def _cb_dock(self, msg):
-        if msg.data and not self.dock_done: self.dock_done = True
+        if msg.data and not self.dock_done:
+            self.dock_done = True
+
     def _cb_skill(self, msg):
-        if msg.data and not self.skill_done: self.skill_done = True
+        if msg.data and not self.skill_done:
+            self.skill_done = True
 
     def _cb_home_future(self, future):
         try:
@@ -396,7 +512,11 @@ class PickPlaceOrchestrator(Node):
         state_name = self.current_state.name
 
         if source_type == "dock":
-            if state_name not in ["WaitDockPoseState", "ExecuteDockState", "WaitDockState"]:
+            if state_name not in [
+                "WaitDockPoseState",
+                "ExecuteDockState",
+                "WaitDockState",
+            ]:
                 return
             # Ensure the tag ID matches the required tag for the current nav location
             expected_tag = self.nav_to_tag.get(self.current_task["nav_goal"])
@@ -426,7 +546,9 @@ class PickPlaceOrchestrator(Node):
 
         t = self.current_task
         if self.last_published_task != t["task"]:
-            self.get_logger().info(f"\n================ TASK: {t['task'].upper()} ================")
+            self.get_logger().info(
+                f"\n================ TASK: {t['task'].upper()} ================"
+            )
             self.pub_ui_task.publish(String(data=t["task"]))
             self.last_published_task = t["task"]
 
@@ -444,6 +566,7 @@ def main(args=None):
     node = PickPlaceOrchestrator()
     rclpy.spin(node)
     rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()
