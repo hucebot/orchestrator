@@ -266,6 +266,8 @@ class WaitTargetPoseState(BaseState):
 
 class ExecuteSkillState(BaseState):
     def execute(self, ctx):
+        # unlock the gaze
+        ctx.pub_gaze_lock.publish(Bool(data=False))
         t = ctx.current_task
         if t["skill"] != "none":
             ctx.pub_toggle_tracking.publish(
@@ -288,6 +290,9 @@ class WaitSkillState(BaseState):
 
 class TaskDoneState(BaseState):
     def execute(self, ctx):
+        # lock the gaze
+        ctx.pub_gaze_lock.publish(Bool(data=True))
+
         ctx.get_logger().info(f"Task {ctx.current_task['task']} Complete.")
         if ctx.tasks:
             ctx.current_task = ctx.tasks.pop(0)
@@ -475,6 +480,8 @@ class PickPlaceOrchestrator(Node):
             PoseStamped, "/dock/goal/target", qos_profile_sensor_data
         )
 
+
+        self.pub_gaze_lock = self.create_publisher(Bool, "/opensot/gaze_lock", qos_state)
         # Static Subscribers
         self.create_subscription(Bool, "/nav/goal/done", self._cb_nav, qos_state)
         self.create_subscription(
