@@ -245,7 +245,7 @@ class VerifyMeshState(BaseState):
         if ctx.mesh_loaded:
             ctx.mesh_loaded = False
             ctx.tracker.reset()
-            time.sleep(2.0)
+            time.sleep(4.0)
             return WaitTargetPoseState()
 
         return self
