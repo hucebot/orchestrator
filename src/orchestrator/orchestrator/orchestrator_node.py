@@ -325,7 +325,36 @@ class PickPlaceOrchestrator(Node):
                 "target_obj": "none",
                 "skill": "place_milk",
             },
+            {
+                "task": "pick_solevita",
+                "nav_goal": "table",
+                "do_dock": True,
+                "target_obj": "solevita",
+                "skill": "pick_solevita",
+            },
+            {
+                "task": "place_solevita",
+                "nav_goal": "fridge_door",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "place_solevita",
+            },
             # BANANA
+            {
+                "task": "pick_orange",
+                "nav_goal": "table",
+                "do_dock": True,
+                "target_obj": "orange",
+                "skill": "pick_orange",
+            },
+            {
+                "task": "place_orange",
+                "nav_goal": "fridge_place",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "place_orange",
+            },
+            # BAGUETTE
             {
                 "task": "pick_banana",
                 "nav_goal": "table",
@@ -340,7 +369,13 @@ class PickPlaceOrchestrator(Node):
                 "target_obj": "none",
                 "skill": "place_banana",
             },
-            # BAGUETTE
+            {
+                "task": "close_fridge",
+                "nav_goal": "fridge_close",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "close_fridge",
+            },
             {
                 "task": "pick_baguette",
                 "nav_goal": "table",
@@ -350,32 +385,10 @@ class PickPlaceOrchestrator(Node):
             },
             {
                 "task": "place_baguette",
-                "nav_goal": "fridge_place",
+                "nav_goal": "sink",
                 "do_dock": True,
                 "target_obj": "none",
                 "skill": "place_baguette",
-            },
-            # APPLE
-            {
-                "task": "pick_apple",
-                "nav_goal": "table",
-                "do_dock": True,
-                "target_obj": "redapple",
-                "skill": "pick_apple",
-            },
-            {
-                "task": "place_apple",
-                "nav_goal": "fridge_place",
-                "do_dock": True,
-                "target_obj": "none",
-                "skill": "place_apple",
-            },
-            {
-                "task": "close_fridge",
-                "nav_goal": "fridge_close",
-                "do_dock": True,
-                "target_obj": "none",
-                "skill": "close_fridge",
             },
         ]
 
@@ -386,6 +399,7 @@ class PickPlaceOrchestrator(Node):
             "fridge_door": "0",
             "fridge_open": "38",
             "fridge_close": "0",
+            "sink": "7",
         }
 
         self.current_task = self.tasks.pop(0)
