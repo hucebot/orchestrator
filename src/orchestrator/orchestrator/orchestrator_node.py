@@ -13,6 +13,7 @@ from rclpy.qos import (
     QoSProfile,
     QoSReliabilityPolicy,
     QoSHistoryPolicy,
+    DurabilityPolicy,
     qos_profile_sensor_data,
 )
 
@@ -132,6 +133,7 @@ class StartPreNavAndMeshState(BaseState):
         ctx.pub_teleop_mode.publish(String(data="replay"))
 
         # 1. Trigger Pre-Nav
+        ctx.pub_toggle_tracking.publish(Bool(data=False)) # Switch off tracking during pre-nav
         pre_nav_str = f"pre_{t['nav_goal']}"
         ctx.pub_nav.publish(String(data=pre_nav_str))
 
@@ -263,6 +265,7 @@ class ExecuteSkillState(BaseState):
     def execute(self, ctx):
         t = ctx.current_task
         if t["skill"] != "none":
+            ctx.pub_toggle_tracking.publish(Bool(data=True)) # Switch on tracking during skill execution
             ctx.pub_skill.publish(String(data=t["skill"]))
             return WaitSkillState()
         else:
@@ -355,20 +358,20 @@ class PickPlaceOrchestrator(Node):
                 "skill": "place_orange",
             },
             # BAGUETTE
-            {
-                "task": "pick_banana",
-                "nav_goal": "table",
-                "do_dock": True,
-                "target_obj": "banana",
-                "skill": "pick_banana",
-            },
-            {
-                "task": "place_banana",
-                "nav_goal": "fridge_place",
-                "do_dock": True,
-                "target_obj": "none",
-                "skill": "place_banana",
-            },
+            # {
+            #     "task": "pick_banana",
+            #     "nav_goal": "table",
+            #     "do_dock": True,
+            #     "target_obj": "banana",
+            #     "skill": "pick_banana",
+            # },
+            # {
+            #     "task": "place_banana",
+            #     "nav_goal": "fridge_place",
+            #     "do_dock": True,
+            #     "target_obj": "none",
+            #     "skill": "place_banana",
+            # },
             {
                 "task": "close_fridge",
                 "nav_goal": "fridge_close",
@@ -427,7 +430,13 @@ class PickPlaceOrchestrator(Node):
         )
         qos_state = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
-            history=QoSHistoryPolicy.TRANSIENT_LOCAL,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+        qos_ui = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            history=QoSHistoryPolicy.KEEP_LAST,
             depth=3,
         )
 
@@ -440,10 +449,10 @@ class PickPlaceOrchestrator(Node):
             String, "/inference/execute_task", qos_cmd
         )
         self.pub_ui_task = self.create_publisher(
-            String, "/orchestrator/ui/current_task", qos_state
+            String, "/orchestrator/ui/current_task", qos_ui
         )
         self.pub_ui_state = self.create_publisher(
-            String, "/orchestrator/ui/current_state", qos_state
+            String, "/orchestrator/ui/current_state", qos_ui
         )
         self.pub_resume = self.create_publisher(Bool, "/ros_control_bridge/restart", 10)
         self.pub_teleop_mode = self.create_publisher(
@@ -473,7 +482,7 @@ class PickPlaceOrchestrator(Node):
         )
         
         
-        # self.pub_toggle_tracking = self.create_publisher(Bool, "/orchestrator/foundation_pose/toggle_tracking", 1)
+        self.pub_toggle_tracking = self.create_publisher(Bool, "/orchestrator/foundation_pose/toggle_tracking", 1)
 
         # Subscribe to all AprilTags defined in the configuration mapping
         unique_tags = set(self.nav_to_tag.values())
@@ -617,7 +626,7 @@ class PickPlaceOrchestrator(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = PickPlaceOrchestrator()
-    rclpy.spin(node)TRANSIENT_LOCAL
+    rclpy.spin(node)
     rclpy.shutdown()
 
 
