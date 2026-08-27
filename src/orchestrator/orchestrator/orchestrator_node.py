@@ -427,8 +427,8 @@ class PickPlaceOrchestrator(Node):
         )
         qos_state = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=1,
+            history=QoSHistoryPolicy.TRANSIENT_LOCAL,
+            depth=3,
         )
 
         # Publishers
@@ -471,6 +471,9 @@ class PickPlaceOrchestrator(Node):
         self.create_subscription(
             Bool, "/orchestrator/manual_override", self._cb_manual_override, 10
         )
+        
+        
+        # self.pub_toggle_tracking = self.create_publisher(Bool, "/orchestrator/foundation_pose/toggle_tracking", 1)
 
         # Subscribe to all AprilTags defined in the configuration mapping
         unique_tags = set(self.nav_to_tag.values())
@@ -614,7 +617,7 @@ class PickPlaceOrchestrator(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = PickPlaceOrchestrator()
-    rclpy.spin(node)
+    rclpy.spin(node)TRANSIENT_LOCAL
     rclpy.shutdown()
 
 
