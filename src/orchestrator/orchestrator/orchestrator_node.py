@@ -87,7 +87,7 @@ class PoseTracker:
         pub.publish(filtered_msg)
 
         self.pose_buffer.append(self.kf_x.copy())
-        if len(self.pose_buffer) > 10:
+        if len(self.pose_buffer) > 4:
             self.pose_buffer.pop(0)
 
         self.stable_pose = True
@@ -133,7 +133,9 @@ class StartPreNavAndMeshState(BaseState):
         ctx.pub_teleop_mode.publish(String(data="replay"))
 
         # 1. Trigger Pre-Nav
-        ctx.pub_toggle_tracking.publish(Bool(data=False)) # Switch off tracking during pre-nav
+        ctx.pub_toggle_tracking.publish(
+            Bool(data=False)
+        )  # Switch off tracking during pre-nav
         pre_nav_str = f"pre_{t['nav_goal']}"
         ctx.pub_nav.publish(String(data=pre_nav_str))
 
@@ -241,6 +243,7 @@ class VerifyMeshState(BaseState):
 
         # If no object manipulation is needed, go straight to skill/done
         if t["target_obj"] == "none":
+            time.sleep(2.0)
             return ExecuteSkillState()
 
         # Check if the mesh has finished loading in the background
@@ -265,7 +268,9 @@ class ExecuteSkillState(BaseState):
     def execute(self, ctx):
         t = ctx.current_task
         if t["skill"] != "none":
-            ctx.pub_toggle_tracking.publish(Bool(data=True)) # Switch on tracking during skill execution
+            ctx.pub_toggle_tracking.publish(
+                Bool(data=True)
+            )  # Switch on tracking during skill execution
             ctx.pub_skill.publish(String(data=t["skill"]))
             return WaitSkillState()
         else:
@@ -328,6 +333,7 @@ class PickPlaceOrchestrator(Node):
                 "target_obj": "none",
                 "skill": "place_milk",
             },
+            # SOLEVITA
             {
                 "task": "pick_solevita",
                 "nav_goal": "table",
@@ -342,7 +348,7 @@ class PickPlaceOrchestrator(Node):
                 "target_obj": "none",
                 "skill": "place_solevita",
             },
-            # BANANA
+            # ORANGE
             {
                 "task": "pick_orange",
                 "nav_goal": "table",
@@ -357,21 +363,22 @@ class PickPlaceOrchestrator(Node):
                 "target_obj": "none",
                 "skill": "place_orange",
             },
-            # BAGUETTE
-            # {
-            #     "task": "pick_banana",
-            #     "nav_goal": "table",
-            #     "do_dock": True,
-            #     "target_obj": "banana",
-            #     "skill": "pick_banana",
-            # },
-            # {
-            #     "task": "place_banana",
-            #     "nav_goal": "fridge_place",
-            #     "do_dock": True,
-            #     "target_obj": "none",
-            #     "skill": "place_banana",
-            # },
+            # BANANA
+            {
+                "task": "pick_banana",
+                "nav_goal": "table",
+                "do_dock": True,
+                "target_obj": "banana",
+                "skill": "pick_banana",
+            },
+            {
+                "task": "place_banana",
+                "nav_goal": "fridge_place",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "place_banana",
+            },
+            # CLOSE FRIDGE
             {
                 "task": "close_fridge",
                 "nav_goal": "fridge_close",
@@ -379,6 +386,7 @@ class PickPlaceOrchestrator(Node):
                 "target_obj": "none",
                 "skill": "close_fridge",
             },
+            # BAGUETTE
             {
                 "task": "pick_baguette",
                 "nav_goal": "table",
@@ -480,9 +488,10 @@ class PickPlaceOrchestrator(Node):
         self.create_subscription(
             Bool, "/orchestrator/manual_override", self._cb_manual_override, 10
         )
-        
-        
-        self.pub_toggle_tracking = self.create_publisher(Bool, "/orchestrator/foundation_pose/toggle_tracking", 1)
+
+        self.pub_toggle_tracking = self.create_publisher(
+            Bool, "/orchestrator/foundation_pose/toggle_tracking", 1
+        )
 
         # Subscribe to all AprilTags defined in the configuration mapping
         unique_tags = set(self.nav_to_tag.values())
