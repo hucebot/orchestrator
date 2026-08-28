@@ -133,9 +133,7 @@ class StartPreNavAndMeshState(BaseState):
         ctx.pub_teleop_mode.publish(String(data="replay"))
 
         # 1. Trigger Pre-Nav
-        ctx.pub_toggle_tracking.publish(
-            Bool(data=False)
-        )  # Switch off tracking during pre-nav
+        ctx.pub_toggle_tracking.publish(Bool(data=False))  # Switch off tracking during pre-nav
         pre_nav_str = f"pre_{t['nav_goal']}"
         ctx.pub_nav.publish(String(data=pre_nav_str))
 
@@ -161,22 +159,8 @@ class StartHomeAndNavState(BaseState):
         # 1. Trigger Final Nav
         ctx.pub_nav.publish(String(data=t["nav_goal"]))
 
-        # 2. Trigger Homing
-        srv_name = f"/home_position/{t['nav_goal']}"
-        if srv_name not in ctx.home_clients:
-            ctx.home_clients[srv_name] = ctx.create_client(Trigger, srv_name)
-
-        client = ctx.home_clients[srv_name]
-        if client.service_is_ready():
-            req = Trigger.Request()
-            future = client.call_async(req)
-            future.add_done_callback(ctx._cb_home_future)
-        else:
-            ctx.get_logger().warn(
-                f"Home service {srv_name} not ready! Marking failed to retry...",
-                throttle_duration_sec=2.0,
-            )
-            ctx.home_trigger_failed = True
+        # 2. Trigger Homing natively via OpenSoT
+        ctx.pub_home_cmd.publish(String(data=t["nav_goal"]))
 
         return WaitHomeAndNavState()
 
@@ -185,23 +169,8 @@ class WaitHomeAndNavState(BaseState):
     def execute(self, ctx):
         t = ctx.current_task
 
-        # If homing service rejected/failed, retry ONLY homing
-        if ctx.home_trigger_failed:
-            ctx.get_logger().warn(
-                "Home config failed! Retrying homing...", throttle_duration_sec=2.0
-            )
-            ctx.home_trigger_failed = False
-
-            srv_name = f"/home_position/{t['nav_goal']}"
-            client = ctx.home_clients.get(srv_name)
-            if client and client.service_is_ready():
-                req = Trigger.Request()
-                future = client.call_async(req)
-                future.add_done_callback(ctx._cb_home_future)
-
         # Wait for BOTH physical motions to finish
         if ctx.nav_done and ctx.home_cfg_done:
-            ctx.pub_resume.publish(Bool(data=True))
             ctx.nav_done = False
             ctx.home_cfg_done = False
 
@@ -270,9 +239,7 @@ class ExecuteSkillState(BaseState):
         ctx.pub_gaze_lock.publish(Bool(data=False))
         t = ctx.current_task
         if t["skill"] != "none":
-            ctx.pub_toggle_tracking.publish(
-                Bool(data=True)
-            )  # Switch on tracking during skill execution
+            ctx.pub_toggle_tracking.publish(Bool(data=True))  # Switch on tracking during skill execution
             ctx.pub_skill.publish(String(data=t["skill"]))
             return WaitSkillState()
         else:
@@ -425,13 +392,11 @@ class PickPlaceOrchestrator(Node):
         self.last_published_task = ""
         self.nav_done = False
         self.home_cfg_done = False
-        self.home_trigger_failed = False
         self.mesh_loaded = False
         self.dock_done = False
         self.skill_done = False
 
         self.tracker = PoseTracker()
-        self.home_clients = {}
 
         self._setup_ros()
 
@@ -455,6 +420,7 @@ class PickPlaceOrchestrator(Node):
 
         # Publishers
         self.pub_nav = self.create_publisher(String, "/nav/goal/target", qos_cmd)
+        self.pub_home_cmd = self.create_publisher(String, "/opensot/home_cmd", qos_cmd)
         self.pub_mesh = self.create_publisher(
             String, "/orchestrator/foundation_pose/target_object", qos_cmd
         )
@@ -467,7 +433,6 @@ class PickPlaceOrchestrator(Node):
         self.pub_ui_state = self.create_publisher(
             String, "/orchestrator/ui/current_state", qos_ui
         )
-        self.pub_resume = self.create_publisher(Bool, "/ros_control_bridge/restart", 10)
         self.pub_teleop_mode = self.create_publisher(
             String, "/streamdeck/teleop_mode", 10
         )
@@ -480,8 +445,8 @@ class PickPlaceOrchestrator(Node):
             PoseStamped, "/dock/goal/target", qos_profile_sensor_data
         )
 
-
         self.pub_gaze_lock = self.create_publisher(Bool, "/opensot/gaze_lock", qos_state)
+
         # Static Subscribers
         self.create_subscription(Bool, "/nav/goal/done", self._cb_nav, qos_state)
         self.create_subscription(
@@ -489,7 +454,7 @@ class PickPlaceOrchestrator(Node):
         )
         self.create_subscription(Bool, "/inference/status", self._cb_skill, qos_state)
         self.create_subscription(
-            Bool, "/cartesian_interface/home_done", self._cb_home, qos_state
+            Bool, "/opensot/home_done", self._cb_home, qos_state
         )
         self.create_subscription(Bool, "/dock/goal/done", self._cb_dock, qos_state)
         self.create_subscription(
@@ -528,10 +493,8 @@ class PickPlaceOrchestrator(Node):
             self.nav_done = True
 
     def _cb_home(self, msg):
-        if msg.data:
+        if msg.data and not self.home_cfg_done:
             self.home_cfg_done = True
-        else:
-            self.home_trigger_failed = True
 
     def _cb_mesh(self, msg):
         if msg.data and not self.mesh_loaded:
@@ -553,7 +516,6 @@ class PickPlaceOrchestrator(Node):
         "WaitHomeAndNavState": lambda ctx: (
             setattr(ctx, "nav_done", True),
             setattr(ctx, "home_cfg_done", True),
-            setattr(ctx, "home_trigger_failed", False),
         ),
         "WaitDockPoseState": lambda ctx: setattr(ctx.tracker, "stable_pose", True),
         "WaitDockState": lambda ctx: setattr(ctx, "dock_done", True),
@@ -577,13 +539,6 @@ class PickPlaceOrchestrator(Node):
 
         override(self)
         self.get_logger().warn(f"MANUAL OVERRIDE: forcing completion of {state_name}.")
-
-    def _cb_home_future(self, future):
-        try:
-            response = future.result()
-            self.home_trigger_failed = not response.success
-        except Exception:
-            self.home_trigger_failed = True
 
     def _cb_pose(self, msg, source_type, tag_id=None):
         """Routes the pose to the tracker depending on the active state and tag mapping."""
