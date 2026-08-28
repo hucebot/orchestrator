@@ -335,21 +335,6 @@ class PickPlaceOrchestrator(Node):
                 "target_obj": "none",
                 "skill": "place_orange",
             },
-            # BANANA
-            {
-                "task": "pick_banana",
-                "nav_goal": "table",
-                "do_dock": True,
-                "target_obj": "banana",
-                "skill": "pick_banana",
-            },
-            {
-                "task": "place_banana",
-                "nav_goal": "fridge_place",
-                "do_dock": True,
-                "target_obj": "none",
-                "skill": "place_banana",
-            },
             # CLOSE FRIDGE
             {
                 "task": "close_fridge",
@@ -372,6 +357,27 @@ class PickPlaceOrchestrator(Node):
                 "do_dock": True,
                 "target_obj": "none",
                 "skill": "place_baguette",
+            },
+            {
+                "task": "pick_baguette",
+                "nav_goal": "table",
+                "do_dock": True,
+                "target_obj": "baguette",
+                "skill": "pick_baguette",
+            },
+            {
+                "task": "place_baguette",
+                "nav_goal": "sink",
+                "do_dock": True,
+                "target_obj": "none",
+                "skill": "place_baguette",
+            },
+            {
+                "task": "finished",
+                "nav_goal": "fridge_open",
+                "do_dock": False,
+                "target_obj": "none",
+                "skill": "none",
             },
         ]
 
@@ -444,8 +450,9 @@ class PickPlaceOrchestrator(Node):
         self.pub_target_pose = self.create_publisher(
             PoseStamped, "/dock/goal/target", qos_profile_sensor_data
         )
-
-        self.pub_gaze_lock = self.create_publisher(Bool, "/opensot/gaze_lock", qos_state)
+        self.pub_gaze_lock = self.create_publisher(
+            Bool, "/opensot/gaze_lock", qos_state
+        )
 
         # Static Subscribers
         self.create_subscription(Bool, "/nav/goal/done", self._cb_nav, qos_state)
