@@ -34,7 +34,6 @@ class PoseTracker:
         self.kf_initialized = False
         self.pose_buffer = []
         self.stable_pose = False
-        self.skill_error = False
 
     def reset(self):
         self.kf_initialized = False
@@ -133,12 +132,10 @@ class StartPreNavAndMeshState(BaseState):
         t = ctx.current_task
         ctx.pub_teleop_mode.publish(String(data="replay"))
 
-        # 1. Trigger Pre-Nav
         ctx.pub_toggle_tracking.publish(Bool(data=False))  # Switch off tracking during pre-nav
         pre_nav_str = f"pre_{t['nav_goal']}"
         ctx.pub_nav.publish(String(data=pre_nav_str))
 
-        # 2. Request Target Mesh (Background loading)
         if t["target_obj"] != "none":
             ctx.pub_mesh.publish(String(data="mesh_update_" + t["target_obj"]))
 
@@ -251,8 +248,7 @@ class ExecuteSkillState(BaseState):
 class WaitSkillState(BaseState):
     def execute(self, ctx):
         if ctx.skill_error:
-            ctx.get_logger().warn(f"Skill error in {ctx.current_task['task']}! Recovering via Pre-Nav...")
-            # Reset all flags
+            # Clear all completion flags
             ctx.skill_error = False
             ctx.skill_done = False
             ctx.nav_done = False
@@ -260,15 +256,35 @@ class WaitSkillState(BaseState):
             ctx.dock_done = False
             ctx.mesh_loaded = False
 
-            # Restart the current task sequence
-            return StartPreNavAndMeshState()
+            if ctx.retry_count < 1:
+                ctx.retry_count += 1
+                ctx.get_logger().warn(f"Skill error in {ctx.current_task['task']}! Retrying via Pre-Nav (Attempt {ctx.retry_count}/1)...")
+                ctx.pub_tts_string.publish(String(data=f"Oops! Let's try again"))
+                return StartPreNavAndMeshState()
+            else:
+                ctx.get_logger().error(f"Task {ctx.current_task['task']} failed after retry. Skipping!")
+                ctx.retry_count = 0
+                ctx.pub_tts_string.publish(String(data=f"Moving on"))
+                # If we failed a "pick", we must also skip the corresponding "place" task
+                if "pick" in ctx.current_task["task"] and ctx.tasks:
+                    next_task = ctx.tasks[0]
+                    if "place" in next_task["task"]:
+                        ctx.get_logger().warn(f"Also skipping dependent task: {next_task['task']}")
+                        ctx.tasks.pop(0)
+
+                # Move to the next sequence
+                if ctx.tasks:
+                    ctx.current_task = ctx.tasks.pop(0)
+                    return StartPreNavAndMeshState()
+                else:
+                    return DoneState()
 
         if ctx.skill_done:
             ctx.skill_done = False
+            ctx.retry_count = 0  # Reset the counter on success!
             return TaskDoneState()
 
         return self
-
 
 class TaskDoneState(BaseState):
     def execute(self, ctx):
@@ -416,6 +432,8 @@ class PickPlaceOrchestrator(Node):
         self.mesh_loaded = False
         self.dock_done = False
         self.skill_done = False
+        self.skill_error = False
+        self.retry_count = 0 # Track retries in the current task
 
         self.tracker = PoseTracker()
 
@@ -461,6 +479,8 @@ class PickPlaceOrchestrator(Node):
         self.pub_gripper_right = self.create_publisher(
             JointTrajectory, "/gripper_right_controller/joint_trajectory", 10
         )
+
+        self.pub_tts_string = self.create_publisher(String, "/serena_tts/text", qos_state)
 
         self.pub_dock = self.create_publisher(Bool, "/dock/goal/start", qos_state)
         self.pub_target_pose = self.create_publisher(
