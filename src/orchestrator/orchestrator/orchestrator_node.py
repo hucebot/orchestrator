@@ -432,8 +432,9 @@ class PickPlaceOrchestrator(Node):
         self.mesh_loaded = False
         self.dock_done = False
         self.skill_done = False
-        self.skill_error = False
         self.retry_count = 0 # Track retries in the current task
+        self.skill_error = False
+
 
         self.tracker = PoseTracker()
 
