@@ -34,6 +34,7 @@ class PoseTracker:
         self.kf_initialized = False
         self.pose_buffer = []
         self.stable_pose = False
+        self.skill_error = False
 
     def reset(self):
         self.kf_initialized = False
@@ -249,9 +250,23 @@ class ExecuteSkillState(BaseState):
 
 class WaitSkillState(BaseState):
     def execute(self, ctx):
+        if ctx.skill_error:
+            ctx.get_logger().warn(f"Skill error in {ctx.current_task['task']}! Recovering via Pre-Nav...")
+            # Reset all flags
+            ctx.skill_error = False
+            ctx.skill_done = False
+            ctx.nav_done = False
+            ctx.home_cfg_done = False
+            ctx.dock_done = False
+            ctx.mesh_loaded = False
+
+            # Restart the current task sequence
+            return StartPreNavAndMeshState()
+
         if ctx.skill_done:
             ctx.skill_done = False
             return TaskDoneState()
+
         return self
 
 
@@ -430,6 +445,7 @@ class PickPlaceOrchestrator(Node):
         self.pub_mesh = self.create_publisher(
             String, "/orchestrator/foundation_pose/target_object", qos_cmd
         )
+        self.create_subscription(Bool, "/inference/error", self._cb_skill_error, qos_state)
         self.pub_skill = self.create_publisher(
             String, "/inference/execute_task", qos_cmd
         )
@@ -514,6 +530,10 @@ class PickPlaceOrchestrator(Node):
     def _cb_skill(self, msg):
         if msg.data and not self.skill_done:
             self.skill_done = True
+
+    def _cb_skill_error(self, msg):
+        if msg.data and not self.skill_error:
+            self.skill_error = True
 
     # Maps each Wait/poll state to the flag(s) it is blocked on, so a manual
     # override can pretend that flag's normal source (a sensor/service

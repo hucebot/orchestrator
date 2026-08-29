@@ -11,7 +11,7 @@ from std_srvs.srv import Trigger
 class DummyEnvironment(Node):
     def __init__(self):
         super().__init__('dummy_environment')
-        
+
         self.get_logger().info("Starting Dummy Environment...")
 
         # --- Publishers (Simulating robot feedback to Orchestrator) ---
@@ -40,7 +40,7 @@ class DummyEnvironment(Node):
         msg = PoseStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = "camera_link"
-        
+
         # Static stable pose
         msg.pose.position.x = 0.5
         msg.pose.position.y = 0.0
@@ -49,7 +49,7 @@ class DummyEnvironment(Node):
         msg.pose.orientation.y = 0.0
         msg.pose.orientation.z = 0.0
         msg.pose.orientation.w = 1.0
-        
+
         self.pub_object_pose.publish(msg)
 
     # ===============================
@@ -88,7 +88,7 @@ class DummyEnvironment(Node):
         msg = Bool()
         msg.data = True
         self.pub_nav_done.publish(msg)
-        
+
         # Reset flag quickly so it doesn't instantly trigger the next state early
         time.sleep(0.5)
         msg.data = False
@@ -101,7 +101,7 @@ class DummyEnvironment(Node):
         msg = String()
         msg.data = "done"
         self.pub_motion_status.publish(msg)
-        
+
         # Clear status so it doesn't trigger future states instantly
         time.sleep(0.5)
         msg.data = "idle"
