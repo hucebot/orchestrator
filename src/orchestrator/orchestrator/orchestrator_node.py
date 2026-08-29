@@ -34,7 +34,6 @@ class PoseTracker:
         self.kf_initialized = False
         self.pose_buffer = []
         self.stable_pose = False
-        self.skill_error = False
 
     def reset(self):
         self.kf_initialized = False
@@ -416,6 +415,8 @@ class PickPlaceOrchestrator(Node):
         self.mesh_loaded = False
         self.dock_done = False
         self.skill_done = False
+        self.skill_error = False
+
 
         self.tracker = PoseTracker()
 
